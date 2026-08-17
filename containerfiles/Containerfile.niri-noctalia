@@ -1,0 +1,71 @@
+FROM ghcr.io/ublue-os/bazzite:latest
+
+# Install niri + noctalia + companion tools
+RUN rpm-ostree install -y \
+    niri \
+    noctalia \
+    fuzzel \
+    foot \
+    mako \
+    wofi \
+    xdg-desktop-portal-gnome \
+    xdg-desktop-portal-wlr \
+    grim \
+    slurp \
+    wl-clipboard \
+    brightnessctl \
+    playerctl \
+    polkit-gnome \
+    && rpm-ostree cleanup -y
+
+# Niri session
+RUN mkdir -p /usr/share/wayland-sessions
+RUN cat > /usr/share/wayland-sessions/niri.desktop <<EOF
+[Desktop Entry]
+Name=Niri
+Comment=Scrollable Tiling Wayland Compositor
+Exec=niri-session
+Type=Application
+DesktopNames=wlroots
+EOF
+
+# Noctalia autostart for niri
+RUN mkdir -p /etc/noctalia
+RUN cat > /etc/noctalia/autostart.conf <<EOF
+[autostart]
+compositor = niri
+EOF
+
+# Default wallpaper
+RUN mkdir -p /usr/share/backgrounds
+RUN curl -fsSL -o /usr/share/backgrounds/default-wallpaper.png \
+    https://raw.githubusercontent.com/niri-wm/artwork/main/wallpapers/Niri%20pool.png || true
+
+# Niri default config directory
+RUN mkdir -p /etc/skel/.config/niri
+RUN mkdir -p /etc/skel/.config/noctalia
+
+# Systemd auto-update timer
+RUN cat > /etc/systemd/system/bazzite-auto-update.timer <<'EOF'
+[Unit]
+Description=Bazzite Auto Update Check
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=24h
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+RUN cat > /etc/systemd/system/bazzite-auto-update.service <<'EOF'
+[Unit]
+Description=Bazzite Auto Update
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/bash -c 'rpm-ostree upgrade && flatpak update -y'
+EOF
+
+RUN systemctl enable bazzite-auto-update.timer
